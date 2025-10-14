@@ -1,0 +1,71 @@
+plugins {
+    alias(libs.plugins.android.library)
+}
+
+android {
+    namespace 'com.fei3ei.qbditrace'
+    compileSdk 36
+
+    defaultConfig {
+        minSdk 24
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
+        externalNativeBuild {
+            cmake {
+                cppFlags ""
+            }
+        }
+        ndk {
+            abiFilters("arm64-v8a")
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+    ndkVersion '28.0.13004108'
+}
+
+dependencies {
+
+    implementation libs.appcompat
+    implementation libs.material
+    testImplementation libs.junit
+    androidTestImplementation libs.ext.junit
+    androidTestImplementation libs.espresso.core
+}
+
+afterEvaluate {
+    android.libraryVariants.forEach { variant ->
+        def variantCapped = variant.name.capitalize()
+        def variantLowered = variant.name.toLowerCase()
+        tasks.register("push${variantCapped}So", Exec) {
+            dependsOn("assemble${variantCapped}")
+            def abi = "arm64-v8a"
+            def soPath = "${project.layout.buildDirectory.get()}/intermediates/stripped_native_libs/${variantLowered}/stripReleaseDebugSymbols/out/lib/${abi}"
+            commandLine "adb", "push", "${soPath}/libqbditrace.so", "/data/local/tmp/"
+        }
+        tasks.named("assemble${variantCapped}"){
+            finalizedBy("push${variantCapped}So")
+        }
+//        tasks.register("chmodExec", Exec){
+//            dependsOn("push2Android")
+//            commandLine "adb", "shell", "su", "-c", "chmod 777 /data/local/tmp/develop/${name}"
+//        }
+    }
+}
+
