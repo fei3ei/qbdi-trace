@@ -1,50 +1,27 @@
 #include "vm.h"
-
-extern QBDI::rword thisModuleTextStart;
-extern QBDI::rword thisModuleTextEnd;
-extern QBDI::rword thisModulePltStart;
-extern QBDI::rword thisModulePltEnd;
+#include <stack>
 extern QBDI::rword thisModuleStart;
-bool subagain = false;
-QBDI::VMAction
+std::stack<QBDI::rword> retaddrStack;
+QBDI::VMAction // deal with BL
 dealPostInstruction(QBDI::VM *vm, QBDI::GPRState *gprState, QBDI::FPRState *fprState, void *data) {
     const QBDI::InstAnalysis *instAnalysis = vm->getInstAnalysis();
-    if(instAnalysis->isCall) {
-        if(gprState->pc >= thisModuleTextStart && gprState->pc <= thisModuleTextEnd) {//函数地址在该so的text段内，肯定是内部调用
-            auto* logData = reinterpret_cast<logManager *>(data);
-            std::string logtext;
-            logtext = fmt::format("{:>{}}{}call sub_{:x}\n", " ", logData->suojinNum * 4,
-                                                  get_prefix_by_address(instAnalysis->address), gprState->pc - thisModuleStart);
-            logData->suojinNum++;
-            logData->logPrint(logtext.c_str());
-        }
+    if(instAnalysis->isCall && strcmp(instAnalysis->mnemonic, "BL") == 0) { //BL指令多用于内部模块的调用
+        auto* logData = reinterpret_cast<logManager *>(data);
+        retaddrStack.push(gprState->lr);
+        std::string logtext;
+        logtext = fmt::format("{:>{}}{}call sub_{:X}\n", " ", logData->suojinNum * 4,
+                              get_prefix_by_address(instAnalysis->address), gprState->pc - thisModuleStart);
+        logData->suojinNum++;
+        logData->logPrint(logtext.c_str());
         return QBDI::VMAction::CONTINUE;
-    }
-    return QBDI::VMAction::CONTINUE;
-}
-
-QBDI::VMAction
-dealPostBR(QBDI::VM *vm, QBDI::GPRState *gprState, QBDI::FPRState *fprState, void *data){
-    const QBDI::InstAnalysis *instAnalysis = vm->getInstAnalysis();
-    if(strcmp(instAnalysis->mnemonic, "B") == 0) {
-        if(gprState->pc >= thisModulePltStart && gprState->pc <= thisModulePltEnd){ //B .plt table
-            subagain = true;
-        }
-    }else if(strcmp(instAnalysis->mnemonic, "BR") == 0) {
-        if(instAnalysis->address >= thisModulePltStart && instAnalysis->address <= thisModulePltEnd){ //BR .plt table
-            return QBDI::VMAction::CONTINUE; //不处理plt表的BR指令
-        }
-        if(gprState->pc >= thisModuleTextEnd || gprState->pc <= thisModuleTextStart){ //BR external function
-            subagain = true;
+    }else{
+        QBDI::rword addr = instAnalysis->address;
+        if(!retaddrStack.empty() && addr == retaddrStack.top()) { //函数返回
+            retaddrStack.pop();
+            auto *logData = reinterpret_cast<logManager *>(data);
+            logData->suojinNum--;
         }
     }
-    return QBDI::VMAction::CONTINUE;
-}
-
-QBDI::VMAction
-dealRET(QBDI::VM *vm, QBDI::GPRState *gprState, QBDI::FPRState *fprState, void *data) {
-    auto* logData = reinterpret_cast<logManager *>(data);
-    logData->suojinNum--;
     return QBDI::VMAction::CONTINUE;
 }
 
@@ -196,14 +173,9 @@ dealCallEvent(QBDI::VM *vm, const QBDI::VMState *vmState, QBDI::GPRState *gprSta
 
 QBDI::VMAction
 dealReturnEvent(QBDI::VM *vm, const QBDI::VMState *vmState, QBDI::GPRState *gprState, QBDI::FPRState *fprState, void *data) {
-    if ((vmState->event & QBDI::EXEC_TRANSFER_RETURN) == 0) {
-        return QBDI::CONTINUE;
-    }
-    logManager* logData = reinterpret_cast<logManager *>(data);
-    if(subagain){
-        subagain = false;
-        logData->suojinNum--;
-    }
+//    if ((vmState->event & QBDI::EXEC_TRANSFER_RETURN) == 0) {
+//        return QBDI::CONTINUE;
+//    }
     return QBDI::VMAction::CONTINUE;
 }
 
@@ -212,8 +184,8 @@ QBDI::VMAction initModuleBase(QBDI::VM *vm, QBDI::GPRState *gprState, QBDI::FPRS
     auto* logData = reinterpret_cast<logManager *>(data);
     const QBDI::InstAnalysis *instAnalysis = vm->getInstAnalysis(QBDI::ANALYSIS_INSTRUCTION | QBDI::ANALYSIS_SYMBOL | QBDI::ANALYSIS_DISASSEMBLY);
     std::string moduleName = instAnalysis->moduleName;
-    initModuleSection(moduleName);
-    logtext = fmt::format("{:>{}}{}sub_{:x}\n", " ", logData->suojinNum * 4,
+    initModuleStart(moduleName);
+    logtext = fmt::format("{:>{}}{}sub_{:X}\n", " ", logData->suojinNum * 4,
                           get_prefix_by_address(gprState->pc), gprState->pc - thisModuleStart);
     logData->logPrint(logtext.c_str());
     logData->suojinNum++;
@@ -227,13 +199,8 @@ QBDI::VM vm::init(QBDI::rword address, logManager *logData) {
     //hook 内部函数调用
     cid = _vm.addCodeAddrCB(address, QBDI::InstPosition::PREINST, initModuleBase, logData);
     assert(cid != QBDI::INVALID_EVENTID);
-    //hook BL and BLR指令
-    cid = _vm.addMnemonicCB("BLR", QBDI::InstPosition::POSTINST, dealPostInstruction, logData);
-    assert(cid != QBDI::INVALID_EVENTID);
-    //hook B and BR指令
-    cid = _vm.addMnemonicCB("BR", QBDI::InstPosition::POSTINST, dealPostBR, logData);
-    assert(cid != QBDI::INVALID_EVENTID);
-    cid = _vm.addMnemonicCB("RET", QBDI::InstPosition::POSTINST, dealRET, logData);
+    //对所有的指令进行hook
+    cid = _vm.addCodeCB(QBDI::InstPosition::POSTINST, dealPostInstruction, logData);
     assert(cid != QBDI::INVALID_EVENTID);
     //hook 外部函数调用（SVC和库函数得分开）
     cid = _vm.addVMEventCB(QBDI::VMEvent::EXEC_TRANSFER_CALL, dealCallEvent, logData);

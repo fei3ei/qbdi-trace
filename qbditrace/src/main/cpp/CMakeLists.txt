@@ -24,6 +24,7 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
         source/parseSymbol.cpp
         source/dealSyscall.cpp
         source/parseExternalCall.cpp
+        source/utils/crc32.cpp
 )
 
 
@@ -32,7 +33,7 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
 
 
 target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-#target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include/utils)
+target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include/utils)
 
 
 

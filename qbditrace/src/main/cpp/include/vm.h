@@ -24,4 +24,9 @@ private:
 
 };
 
+struct funcInfo{
+    QBDI::rword addr;
+    QBDI::rword retAddr;
+};
+
 #endif //QBDI_DEMO_VM_H

@@ -11,7 +11,7 @@
 #define LOGI_FMT(...) \
     do { \
         std::string _log = fmt::format(__VA_ARGS__); \
-        __android_log_write(ANDROID_LOG_INFO, "Hexdump", _log.c_str()); \
+        __android_log_write(ANDROID_LOG_INFO, "fei3ei-Hexdump", _log.c_str()); \
     } while (0)
 
 /**

@@ -2,31 +2,39 @@
 // Created by chenfangzheng on 2025/7/21.
 //
 #include "parseSymbol.h"
+#include "crc32.h"
+#include "hexdump.h"
 std::map<QBDI::rword, std::string> symbolNameCache; //address -> symbol name
 std::map<std::string, moduleInfo> moduleInfoCache; //module name -> module base
-QBDI::rword thisModuleTextStart = 0x0;
-QBDI::rword thisModuleTextEnd = 0x0;
 QBDI::rword thisModuleStart = 0x0;
-QBDI::rword thisModulePltStart = 0x0;
-QBDI::rword thisModulePltEnd = 0x0;
 std::vector<std::string> excludeModules = {"libmsaoaidsec.so", "libmsaoaidauth.so"};
+std::string tmpModuleID = "";
 void initModuleInfo(){
     for(QBDI::MemoryMap& map : QBDI::getCurrentProcessMaps(true)){
         std::string modulePath = map.name;
-        if(modulePath.ends_with(".so")){
+        if(modulePath.ends_with(".so")){ //说明是一个so文件
             std::string moduleName = modulePath.substr(modulePath.find_last_of('/') + 1);
-            if(std::find(excludeModules.begin(), excludeModules.end(), moduleName) != excludeModules.end()) {
+            if(std::find(excludeModules.begin(), excludeModules.end(), moduleName) != excludeModules.end()) { //排除列表中的模块
                 continue;
             }
-            if(moduleInfoCache.find(moduleName) == moduleInfoCache.end()){ //初始化一个moduleInfo
-                LOGI("Module path: %s ", modulePath.c_str());
+            if(*(uint32_t*)map.range.start() == 0x464c457f){ //开头为elf的魔术，初始化一个moduleInfo
                 moduleInfo info;
                 info.path = modulePath;
-                info.start = map.range.start();
-                std::unique_ptr<LIEF::ELF::Binary> elf = LIEF::ELF::Parser::parse(modulePath);
-                const LIEF::ELF::Section* text_section = elf->get_section(".text");
-                info.end = text_section->virtual_address() + text_section->size() + info.start;
-                moduleInfoCache[moduleName] = info; //将这个module的信息加入到缓存中
+                info.base = map.range.start();
+                info.exeStart = 0xffffffffffffffff;
+                info.exeEnd = 0;
+                std::string moduleID = fmt::format("{}_{:x}", moduleName, info.base);
+                tmpModuleID = moduleID;
+                moduleInfoCache[moduleID] = info; //将这个module的信息加入到缓存中
+            }else{ //模块已经被缓存了
+                if((map.permission & QBDI::PF_EXEC) != 0){
+                    if(map.range.start() < moduleInfoCache[tmpModuleID].exeStart){
+                        moduleInfoCache[tmpModuleID].exeStart = map.range.start();
+                    }
+                    if(map.range.end() > moduleInfoCache[tmpModuleID].exeEnd) {
+                        moduleInfoCache[tmpModuleID].exeEnd = map.range.end();
+                    }
+                }
             }
         }
     }
@@ -36,8 +44,8 @@ void initModuleInfo(){
 std::string get_SymbolName_by_address(QBDI::rword address) {
     if (symbolNameCache.find(address) == symbolNameCache.end()) { //该地址的符号信息没有缓存，那么将此so的符号
         for(const auto& [name, info] : moduleInfoCache) {
-            if (address >= info.start && address < info.end) { //如果地址在这个so的范围内,则开始解析该so的符号
-                get_Module_internal_Symbol(info.path, info.start);
+            if (address >= info.exeStart && address < info.exeEnd) { //如果地址在这个so的范围内,则开始解析该so的符号
+                get_Module_internal_Symbol(info.path, info.base);
                 break;
             }
         }
@@ -85,19 +93,19 @@ void get_Module_internal_Symbol(std::string path, QBDI::rword base) {
 }
 
 void parse_Symbol_from_Memory(QBDI::rword address){
-    std::string moduleName;
-    for(const auto& [name, info] : moduleInfoCache) {
-        if (address >= info.start && address < info.end) { //如果地址在这个so的范围内,则开始解析该so的符号
-            moduleName = name;
+    std::string moduleID;
+    for(const auto& [ID, info] : moduleInfoCache) {
+        if (address >= info.exeStart && address < info.exeEnd) { //如果地址在这个so的范围内,则开始解析该so的符号
+            moduleID = ID;
             break;
         }
     }
-    if(moduleInfoCache.find(moduleName) == moduleInfoCache.end()) {
-        LOGE("Module %s not found in cache", moduleName.c_str());
+    if(moduleInfoCache.find(moduleID) == moduleInfoCache.end()) {
+        LOGE("Module %s not found in cache", moduleID.c_str());
         return;
     }
-    QBDI::rword base = moduleInfoCache[moduleName].start;
-    std::string path = moduleInfoCache[moduleName].path;
+    QBDI::rword base = moduleInfoCache[moduleID].base;
+    std::string path = moduleInfoCache[moduleID].path;
     std::unique_ptr<LIEF::ELF::Binary> elf = LIEF::ELF::Parser::parse(path);
     const LIEF::ELF::Section* dynstr_section = elf->get_section(".dynstr");
     const char* dynstr = reinterpret_cast<const char*>(base + dynstr_section->virtual_address());
@@ -113,9 +121,10 @@ void parse_Symbol_from_Memory(QBDI::rword address){
 }
 std::string get_prefix_by_address(QBDI::rword address){
     std::string prefix;
-    for(const auto& [name, info] : moduleInfoCache) {
-        if (address >= info.start && address < info.end) { //如果地址在这个so的范围内,则开始解析该so的符号
-            prefix = fmt::format("[{}!{:#x}]", name, address - info.start);
+    for(const auto& [moduleID, info] : moduleInfoCache) {
+        if (address >= info.exeStart && address < info.exeEnd) { //如果地址在这个so的范围内,则开始解析该so的符号
+            std::string name = moduleID.substr(0, moduleID.find('_'));
+            prefix = fmt::format("[{}!{:#x}]", name, address - info.base);
             return prefix;
         }
     }
@@ -123,24 +132,12 @@ std::string get_prefix_by_address(QBDI::rword address){
     return prefix;
 }
 
-void initModuleSection(std::string moduleName){
-    thisModuleStart = moduleInfoCache[moduleName].start;
-    std::unique_ptr<LIEF::ELF::Binary> elf = LIEF::ELF::Parser::parse(moduleInfoCache[moduleName].path);
-    const LIEF::ELF::Section* text_section = elf->get_section(".text");
-    if (text_section) {
-        thisModuleTextStart = text_section->virtual_address() + moduleInfoCache[moduleName].start;
-        thisModuleTextEnd = thisModuleTextStart + text_section->size();
-        LOGI("Module %s text section: Start: %#lx, End: %#lx", moduleName.c_str(), thisModuleTextStart, thisModuleTextEnd);
-    } else {
-        LOGE("No .text section found in module %s", moduleName.c_str());
-    }
-
-    const LIEF::ELF::Section* plt_section = elf->get_section(".plt");
-    if (text_section) {
-        thisModulePltStart = plt_section->virtual_address() + moduleInfoCache[moduleName].start;
-        thisModulePltEnd = thisModulePltStart + plt_section->size();
-        LOGI("Module %s plt section: Start: %#lx, End: %#lx", moduleName.c_str(), thisModulePltStart, thisModulePltEnd);
-    } else {
-        LOGE("No .plt section found in module %s", moduleName.c_str());
+void initModuleStart(std::string moduleName){
+    for(const auto& [moduleID, info] : moduleInfoCache) {
+        if(moduleID.starts_with(moduleName)) {
+            thisModuleStart = info.base;
+            LOGI("this module %s start at %#lx", moduleName.c_str(), thisModuleStart);
+            return;
+        }
     }
 }
