@@ -31,6 +31,12 @@ std::string parse_mmap(uint64_t addr, uint64_t length, int prot, int flags, int 
     return logtext;
 }
 
+std::string parse_munmap(uint64_t addr, size_t len) {
+    std::string logtext;
+    logtext = fmt::format("munmap({:#x},{:#x})", addr, len);
+    return logtext;
+}
+
 std::string parse_memset(uint64_t ptr, int value, size_t num) {
     std::string logtext;
     logtext = fmt::format("memset({:#x},{},{})", ptr, value, num);
@@ -106,6 +112,12 @@ std::string parse_sscanf(const char* str, const char* format) {
 std::string parse_fopen(const char *filename, const char *mode) {
     std::string logtext;
     logtext = fmt::format("fopen({},{})", filename, mode);
+    return logtext;
+}
+
+std::string parse_fgets(uint64_t dest, int n) {
+    std::string logtext;
+    logtext = fmt::format("fgets({:#x},{})", dest, n);
     return logtext;
 }
 

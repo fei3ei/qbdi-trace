@@ -9,6 +9,7 @@
 #include <fmt/core.h>
 #include <sys/types.h>
 std::string parse_mmap(uint64_t addr, uint64_t length, int prot, int flags, int fd, uint64_t offset);
+std::string parse_munmap(uint64_t addr, size_t len);
 std::string parse_memset(uint64_t ptr, int value, size_t num);
 std::string parse_openat(uint64_t fd, const char *pathname, uint64_t flags, uint64_t mode);
 std::string parse_process_vm_readv(uint64_t pid, uint64_t local_iov, uint64_t liovcnt, uint64_t remote_iov, uint64_t riovcnt, uint64_t flags);
@@ -19,6 +20,7 @@ std::string parse_sleep(uint32_t seconds);
 std::string parse_usleep(uint64_t usec);
 std::string parse_malloc(uint64_t size);
 std::string parse_fopen(const char *filename, const char *mode);
+std::string parse_fgets(uint64_t dest, int n);
 std::string parse_strstr(const char *haystack, const char *needle);
 std::string parse_strlen(const char *s);
 std::string parse_strcmp(const char *s1, const char *s2);

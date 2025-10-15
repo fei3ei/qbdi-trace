@@ -1,7 +1,11 @@
 #include "vm.h"
 #include <stack>
 extern QBDI::rword thisModuleStart;
-std::stack<QBDI::rword> retaddrStack;
+static std::stack<QBDI::rword> retaddrStack;
+static std::string retFuncName = "";
+static uint64_t parameter1 = 0;
+static uint64_t parameter2 = 0;
+static uint64_t parameter3 = 0;
 QBDI::VMAction // deal with BL
 dealPostInstruction(QBDI::VM *vm, QBDI::GPRState *gprState, QBDI::FPRState *fprState, void *data) {
     const QBDI::InstAnalysis *instAnalysis = vm->getInstAnalysis();
@@ -121,6 +125,11 @@ dealCallEvent(QBDI::VM *vm, const QBDI::VMState *vmState, QBDI::GPRState *gprSta
         uint64_t offset = x5;
         logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
                               get_prefix_by_address(gprState->pc), parse_mmap(addr, length, prot, flags, fd, offset));
+    }else if(funcName == "munmap") {
+        uint64_t addr = x0;
+        size_t len = (size_t)x1;
+        logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
+                              get_prefix_by_address(gprState->pc), parse_munmap(addr, len));
     }else if(funcName == "mprotect") {
         uint64_t addr = x0;
         size_t size = x1;
@@ -159,6 +168,13 @@ dealCallEvent(QBDI::VM *vm, const QBDI::VMState *vmState, QBDI::GPRState *gprSta
         const char *needle = reinterpret_cast<const char *>(x1);
         logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
                               get_prefix_by_address(gprState->pc), parse_strstr(haystack, needle));
+    }else if(funcName == "fgets"){
+        uint64_t dest = x0;
+        int n = (int)x1;
+        retFuncName = funcName; //记录上一次调用的函数名，在函数返回时能够根据函数的不同来进行相应的处理
+        parameter1 = x0; //记录写入字符串的地址，方便返回时打印结果
+        logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
+                              get_prefix_by_address(gprState->pc), parse_fgets(dest, n));
     }else if(funcName == "sscanf"){
         const char* str = reinterpret_cast<const char *>(x0);
         const char* format = reinterpret_cast<const char *>(x1);
@@ -222,9 +238,21 @@ dealCallEvent(QBDI::VM *vm, const QBDI::VMState *vmState, QBDI::GPRState *gprSta
 
 QBDI::VMAction
 dealReturnEvent(QBDI::VM *vm, const QBDI::VMState *vmState, QBDI::GPRState *gprState, QBDI::FPRState *fprState, void *data) {
-//    if ((vmState->event & QBDI::EXEC_TRANSFER_RETURN) == 0) {
-//        return QBDI::CONTINUE;
-//    }
+    if ((vmState->event & QBDI::EXEC_TRANSFER_RETURN) == 0) {
+        return QBDI::CONTINUE;
+    }
+    auto* logData = reinterpret_cast<logManager *>(data);
+    uint64_t x0 = gprState->x0;
+    std::string logtext;
+    if(retFuncName == ""){ //没有记录上一次调用的函数名，直接返回
+        return QBDI::VMAction::CONTINUE;
+    }else if(retFuncName == "fgets"){
+        const char* resultStr = reinterpret_cast<const char *>(parameter1);
+        logtext = fmt::format("{:>{}}fgets return {:#x}:{}\n", " ", logData->suojinNum * 4, x0, resultStr);
+        retFuncName = "";
+        parameter1 = 0;
+    }
+    logData->logPrint(logtext.c_str());
     return QBDI::VMAction::CONTINUE;
 }
 
