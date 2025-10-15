@@ -3,8 +3,39 @@
 //
 
 
-#include <android/log.h>
+#include <unistd.h>
 #include "parseExternalCall.h"
+
+static int get_filename_by_fd(int fd, char * out, size_t outlen){
+    char procpath[64];
+    ssize_t r;
+    snprintf(procpath, sizeof(procpath), "/proc/self/fd/%d", fd);
+    r = readlink(procpath, out, outlen - 1);
+    if (r < 0) return -1;
+    out[r] = '\0';
+    return 0;
+}
+
+std::string parse_mmap(uint64_t addr, uint64_t length, int prot, int flags, int fd, uint64_t offset){
+    std::string logtext;
+    char buf[512] = {0};
+    if(fd == -1){
+        logtext = fmt::format("mmap({:#x},{:#x},{},{},{},{:#x})", addr, length, prot, flags, fd, offset);
+    }else{
+        if(get_filename_by_fd(fd, buf, sizeof(buf)) == 0){ //成功从fd中获取到了文件名
+            logtext = fmt::format("mmap({:#x},{:#x},{},{},{}, {:#x})", addr, length, prot, flags, buf, offset);
+        }else{ //没有获取到文件名
+            logtext = fmt::format("mmap({:#x},{:#x},{},{},{},{:#x})", addr, length, prot, flags, fd, offset);
+        }
+    }
+    return logtext;
+}
+
+std::string parse_memset(uint64_t ptr, int value, size_t num) {
+    std::string logtext;
+    logtext = fmt::format("memset({:#x},{},{})", ptr, value, num);
+    return logtext;
+}
 
 std::string parse_openat(uint64_t fd, const char *pathname, uint64_t flags, uint64_t mode) {
     std::string logtext;
@@ -66,6 +97,12 @@ std::string parse_memcpy(uint64_t dest, uint64_t src, uint64_t n) {
     return logtext;
 }
 
+std::string parse_sscanf(const char* str, const char* format) {
+    std::string logtext;
+    logtext = fmt::format("sscanf({},{},...)", str, format);
+    return logtext;
+}
+
 std::string parse_fopen(const char *filename, const char *mode) {
     std::string logtext;
     logtext = fmt::format("fopen({},{})", filename, mode);
@@ -90,8 +127,38 @@ std::string parse_malloc(uint64_t size) {
     return logtext;
 }
 
-std::string parse_mprotect(uint64_t addr, uint64_t len, uint64_t prot) {
+std::string parse_mprotect(uint64_t addr, size_t size, int prot) {
     std::string logtext;
-    logtext = fmt::format("mprotect({:#x},{:#x},{})", addr, len, prot);
+    logtext = fmt::format("mprotect({:#x},{:#x},{})", addr, size, prot);
+    return logtext;
+}
+
+std::string parse_dlopen(const char *path, int flag) {
+    std::string logtext;
+    logtext = fmt::format("dlopen({},{})", path, flag);
+    return logtext;
+}
+
+std::string parse_dlsym(uint64_t handle, const char *symbol) {
+    std::string logtext;
+    logtext = fmt::format("dlsym({:#x},{})", handle, symbol);
+    return logtext;
+}
+
+std::string parse__system_property_get(const char *name){
+    std::string logtext;
+    logtext = fmt::format("__system_property_get({})", name);
+    return logtext;
+}
+
+std::string parse_atoi(const char *str){
+    std::string logtext;
+    logtext = fmt::format("atoi({})", str);
+    return logtext;
+}
+
+std::string parse_sysconf(int name){
+    std::string logtext;
+    logtext = fmt::format("sysconf({})", name);
     return logtext;
 }

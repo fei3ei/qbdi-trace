@@ -112,6 +112,27 @@ dealCallEvent(QBDI::VM *vm, const QBDI::VMState *vmState, QBDI::GPRState *gprSta
         uint64_t arg = x3;
         logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
                               get_prefix_by_address(gprState->pc), parse_pthread_create(thread, attr, start_routine - thisModuleStart, arg));
+    }else if(funcName.find("mmap") != std::string::npos) {
+        uint64_t addr = x0;
+        uint64_t length = x1;
+        int prot = (int)x2;
+        int flags = (int)x3;
+        int fd = (int)x4;
+        uint64_t offset = x5;
+        logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
+                              get_prefix_by_address(gprState->pc), parse_mmap(addr, length, prot, flags, fd, offset));
+    }else if(funcName == "mprotect") {
+        uint64_t addr = x0;
+        size_t size = x1;
+        int prot = (int)x2;
+        logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
+                              get_prefix_by_address(gprState->pc), parse_mprotect(addr, size, prot));
+    }else if(funcName == "memset") {
+        uint64_t ptr = x0;
+        int value = (int)x1;
+        size_t num = (size_t)x2;
+        logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
+                              get_prefix_by_address(gprState->pc), parse_memset(ptr, value, num));
     }else if(funcName.find("memcpy") != std::string::npos) {
         uint64_t dest = x0;
         uint64_t src = x1;
@@ -138,6 +159,11 @@ dealCallEvent(QBDI::VM *vm, const QBDI::VMState *vmState, QBDI::GPRState *gprSta
         const char *needle = reinterpret_cast<const char *>(x1);
         logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
                               get_prefix_by_address(gprState->pc), parse_strstr(haystack, needle));
+    }else if(funcName == "sscanf"){
+        const char* str = reinterpret_cast<const char *>(x0);
+        const char* format = reinterpret_cast<const char *>(x1);
+        logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
+                              get_prefix_by_address(gprState->pc), parse_sscanf(str, format));
     }else if(funcName == "sleep"){
         uint64_t seconds = x0;
         logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
@@ -163,6 +189,29 @@ dealCallEvent(QBDI::VM *vm, const QBDI::VMState *vmState, QBDI::GPRState *gprSta
         uint64_t mode = x3;
         logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
                               get_prefix_by_address(gprState->pc), parse_openat(fd, pathname, flags, mode));
+    }else if(funcName == "dlopen"){
+        const char* path = reinterpret_cast<const char *>(x0);
+        int flag = (int)x1;
+        logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
+                              get_prefix_by_address(gprState->pc), parse_dlopen(path, flag));
+    }else if(funcName == "dlsym"){
+        uint64_t handle = x0;
+        const char* symbol = reinterpret_cast<const char *>(x1);
+        logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
+                              get_prefix_by_address(gprState->pc), parse_dlsym(handle, symbol));
+    }else if(funcName == "__system_property_get"){
+        const char* name = reinterpret_cast<const char *>(x0);
+        uint64_t value = x1;
+        logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
+                              get_prefix_by_address(gprState->pc), parse__system_property_get(name));
+    }else if(funcName == "atoi"){
+        const char* str = reinterpret_cast<const char *>(x0);
+        logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
+                              get_prefix_by_address(gprState->pc), parse_atoi(str));
+    }else if(funcName == "sysconf"){
+        int name = (int)x0;
+        logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
+                              get_prefix_by_address(gprState->pc), parse_sysconf(name));
     }else{//没有处理参数的外部函数调用
         logtext = fmt::format("{:>{}}{}{}(...)\n", " ", logData->suojinNum * 4,
                               get_prefix_by_address(gprState->pc), funcName);
