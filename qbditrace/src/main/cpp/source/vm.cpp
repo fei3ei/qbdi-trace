@@ -267,20 +267,20 @@ dealReturnEvent(QBDI::VM *vm, const QBDI::VMState *vmState, QBDI::GPRState *gprS
     }else if(retFuncName == "fgets"){
         const char* resultStr = reinterpret_cast<const char *>(parameter1);
         logtext = fmt::format("{:>{}}fgets return {:#x}:{}\n", " ", logData->suojinNum * 4, x0, resultStr);
-        retFuncName = "";
-        parameter1 = 0;
     }else if(retFuncName == "malloc"){
         uint64_t result = x0;
         logtext = fmt::format("->{:#x}\n",  result);
-        retFuncName = "";
     }else if(retFuncName == "calloc"){
         uint64_t result = x0;
         logtext = fmt::format("->{:#x}\n", result);
     }else if(retFuncName == "dlopen") {
         uint64_t result = x0;
         logtext = fmt::format("->{:#x}\n", result);
-        retFuncName = "";
     }
+    retFuncName = "";
+    parameter1 = 0;
+    parameter2 = 0;
+    parameter3 = 0;
     logData->logPrint(logtext.c_str());
     return QBDI::VMAction::CONTINUE;
 }
