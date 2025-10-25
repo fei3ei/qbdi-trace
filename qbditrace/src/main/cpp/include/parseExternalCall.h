@@ -19,6 +19,7 @@ std::string parse_memcmp(const char *s1, const char *s2, uint64_t n);
 std::string parse_sleep(uint32_t seconds);
 std::string parse_usleep(uint64_t usec);
 std::string parse_malloc(uint64_t size);
+std::string parse_calloc(uint64_t nitems, uint64_t size);
 std::string parse_fopen(const char *filename, const char *mode);
 std::string parse_fgets(uint64_t dest, int n);
 std::string parse_strstr(const char *haystack, const char *needle);

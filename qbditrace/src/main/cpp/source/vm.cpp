@@ -148,6 +148,12 @@ dealCallEvent(QBDI::VM *vm, const QBDI::VMState *vmState, QBDI::GPRState *gprSta
         uint64_t n = x2;
         logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
                               get_prefix_by_address(gprState->pc), parse_memcpy(dest, src, n));
+    }else if(funcName == "memmove"){
+        uint64_t dest = x0;
+        uint64_t src = x1;
+        uint64_t n = x2;
+        logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
+                              get_prefix_by_address(gprState->pc), parse_memcpy(dest, src, n));
     }else if(funcName == "memcmp") {
         const char* s1 = reinterpret_cast<const char *>(x0);
         const char* s2 = reinterpret_cast<const char *>(x1);
@@ -171,8 +177,8 @@ dealCallEvent(QBDI::VM *vm, const QBDI::VMState *vmState, QBDI::GPRState *gprSta
     }else if(funcName == "fgets"){
         uint64_t dest = x0;
         int n = (int)x1;
-        retFuncName = funcName; //记录上一次调用的函数名，在函数返回时能够根据函数的不同来进行相应的处理
-        parameter1 = x0; //记录写入字符串的地址，方便返回时打印结果
+//        retFuncName = funcName; //记录上一次调用的函数名，在函数返回时能够根据函数的不同来进行相应的处理
+//        parameter1 = x0; //记录写入字符串的地址，方便返回时打印结果
         logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
                               get_prefix_by_address(gprState->pc), parse_fgets(dest, n));
     }else if(funcName == "sscanf"){
@@ -190,8 +196,15 @@ dealCallEvent(QBDI::VM *vm, const QBDI::VMState *vmState, QBDI::GPRState *gprSta
                               get_prefix_by_address(gprState->pc), parse_usleep(usec));
     }else if(funcName == "malloc"){
         uint64_t size = x0;
-        logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
+        retFuncName = funcName;
+        logtext = fmt::format("{:>{}}{}{}", " ", logData->suojinNum * 4,
                               get_prefix_by_address(gprState->pc), parse_malloc(size));
+    }else if(funcName == "calloc"){
+        uint64_t nitems = x0;
+        uint64_t size = x1;
+        retFuncName = funcName;
+        logtext = fmt::format("{:>{}}{}{}", " ", logData->suojinNum * 4,
+                              get_prefix_by_address(gprState->pc), parse_calloc(nitems, size));
     }else if(funcName.find("fopen") != std::string::npos){
         const char *filename = reinterpret_cast<const char *>(x0);
         const char *mode = reinterpret_cast<const char *>(x1);
@@ -208,7 +221,8 @@ dealCallEvent(QBDI::VM *vm, const QBDI::VMState *vmState, QBDI::GPRState *gprSta
     }else if(funcName == "dlopen"){
         const char* path = reinterpret_cast<const char *>(x0);
         int flag = (int)x1;
-        logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
+        retFuncName = funcName;
+        logtext = fmt::format("{:>{}}{}{}", " ", logData->suojinNum * 4,
                               get_prefix_by_address(gprState->pc), parse_dlopen(path, flag));
     }else if(funcName == "dlsym"){
         uint64_t handle = x0;
@@ -224,6 +238,10 @@ dealCallEvent(QBDI::VM *vm, const QBDI::VMState *vmState, QBDI::GPRState *gprSta
         const char* str = reinterpret_cast<const char *>(x0);
         logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
                               get_prefix_by_address(gprState->pc), parse_atoi(str));
+    }else if(funcName == "free"){
+        uint64_t ptr = x0;
+        logtext = fmt::format("{:>{}}{}free({:#x})\n", " ", logData->suojinNum * 4,
+                              get_prefix_by_address(gprState->pc), ptr);
     }else if(funcName == "sysconf"){
         int name = (int)x0;
         logtext = fmt::format("{:>{}}{}{}\n", " ", logData->suojinNum * 4,
@@ -251,6 +269,17 @@ dealReturnEvent(QBDI::VM *vm, const QBDI::VMState *vmState, QBDI::GPRState *gprS
         logtext = fmt::format("{:>{}}fgets return {:#x}:{}\n", " ", logData->suojinNum * 4, x0, resultStr);
         retFuncName = "";
         parameter1 = 0;
+    }else if(retFuncName == "malloc"){
+        uint64_t result = x0;
+        logtext = fmt::format("->{:#x}\n",  result);
+        retFuncName = "";
+    }else if(retFuncName == "calloc"){
+        uint64_t result = x0;
+        logtext = fmt::format("->{:#x}\n", result);
+    }else if(retFuncName == "dlopen") {
+        uint64_t result = x0;
+        logtext = fmt::format("->{:#x}\n", result);
+        retFuncName = "";
     }
     logData->logPrint(logtext.c_str());
     return QBDI::VMAction::CONTINUE;

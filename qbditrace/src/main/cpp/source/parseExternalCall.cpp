@@ -39,7 +39,7 @@ std::string parse_munmap(uint64_t addr, size_t len) {
 
 std::string parse_memset(uint64_t ptr, int value, size_t num) {
     std::string logtext;
-    logtext = fmt::format("memset({:#x},{},{})", ptr, value, num);
+    logtext = fmt::format("memset({:#x},{},{:#x})", ptr, value, num);
     return logtext;
 }
 
@@ -93,13 +93,14 @@ std::string parse_memcmp(const char *s1, const char *s2, uint64_t n) {
 
 std::string parse_memcpy(uint64_t dest, uint64_t src, uint64_t n) {
     std::string logtext;
-    const char* tmp = reinterpret_cast<const char*>(src);
-    size_t safe_len = strnlen(tmp, n);
-    if(safe_len <= n){//说明src是一个字符串，直接打印字符串内容
-        logtext = fmt::format("memcpy({:#x},{},{})", dest, reinterpret_cast<const char *>(src), n);
-    }else{
-        logtext = fmt::format("memcpy({:#x},{:#x},{})", dest, src, n);
-    }
+//    const char* tmp = reinterpret_cast<const char*>(src);
+//    size_t safe_len = strnlen(tmp, n);
+//    if(safe_len <= n){//说明src是一个字符串，直接打印字符串内容
+//        logtext = fmt::format("memcpy({:#x},{},{})", dest, reinterpret_cast<const char *>(src), n);
+//    }else{
+//        logtext = fmt::format("memcpy({:#x},{:#x},{})", dest, src, n);
+//    }
+    logtext = fmt::format("memcpy({:#x},{:#x},{:#x})", dest, src, n);
     return logtext;
 }
 
@@ -135,7 +136,13 @@ std::string parse_usleep(uint64_t usec) {
 
 std::string parse_malloc(uint64_t size) {
     std::string logtext;
-    logtext = fmt::format("malloc({})", size);
+    logtext = fmt::format("malloc({:#x})", size);
+    return logtext;
+}
+
+std::string parse_calloc(uint64_t nitems, uint64_t size) {
+    std::string logtext;
+    logtext = fmt::format("calloc({:#x},{:#x})", nitems, size);
     return logtext;
 }
 
